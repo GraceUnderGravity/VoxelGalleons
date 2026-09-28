@@ -1,0 +1,8 @@
+{
+  "name": "voxel-galleons",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs", "test": "node --test --experimental-test-isolation=none tests/*.test.mjs", "check": "node --check dist/game.js" },
+  "dependencies": { "three": "0.180.0" }
+}

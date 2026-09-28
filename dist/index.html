@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Voxel Galleons · The Pirate Republic</title>
+  <meta name="description" content="Captain a voxel galleon across the Caribbean. Collect lost treasure, battle the royal navy, and return to Nassau in this playable Three.js pirate game.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230f302e'/%3E%3Cpath d='M13 43h40l-9 10H23zM30 10h4v30h-4zM27 14L13 37h14zm10 4v19h16z' fill='%23e8c98b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main id="game" aria-label="Voxel Galleons pirate game">
+    <canvas id="sea" aria-label="Caribbean sea. Use W and S to adjust sails, A and D to steer, and Space to fire." tabindex="0"></canvas>
+    <div class="vignette"></div>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">⚓︎</span><div><h1>VOXEL GALLEONS</h1><span>THE PIRATE REPUBLIC</span></div></div>
+      <div class="location"><span class="ornament">✦</span><div>THE BAHAMAS<span>CARIBBEAN SEA · 1715</span></div><span class="ornament">✦</span></div>
+      <div class="top-actions"><div class="gold"><span>◈</span><b id="gold">0</b><small>DOUBLOONS</small></div><button class="icon-btn" id="sound" aria-label="Enable sound" title="Sound">♫</button><button class="icon-btn" id="pause" aria-label="Pause game" title="Pause (P)">Ⅱ</button></div>
+    </header>
+    <div class="view-tools"><button id="dev-button" title="Developer menu (F2)">Dev <kbd>F2</kbd></button><button id="ui-toggle" aria-pressed="false" title="Toggle interface (U)">Hide UI [U]</button></div>
+    <section class="voyage panel">
+      <div class="eyebrow"><span class="little-rule"></span> YOUR VOYAGE</div>
+      <h2>A pirate’s fortune</h2>
+      <p>The Crown calls it theft.<br>We call it a living.</p>
+      <div class="objectives"><div id="salvage-objective"><span class="objective-icon">◇</span><span>Recover lost cargo</span><b id="cargo-count">0 / 5</b></div><div id="battle-objective"><span class="objective-icon">⚔</span><span>Sink navy patrols</span><b id="sunk-count">0 / 2</b></div><div id="return-objective"><span class="objective-icon">⚑</span><span>Return to Nassau</span><b id="port-status">—</b></div></div>
+      <div class="bounty"><span>VOYAGE REWARD</span><strong>◈ 1,000</strong></div>
+    </section>
+    <div class="wind"><div class="wind-rose"><span>N</span><i>➤</i></div><div><b id="weather-label">PASSING SQUALLS</b><span id="wind-reading">NE · 16 KNOTS</span></div></div>
+    <div id="world-labels" aria-hidden="true"></div>
+    <div class="ocean-caption">THE OPEN SEA<span>FORTUNE FAVOURS THE BOLD</span></div>
+    <section class="ship-panel panel"><div class="ship-title"><span class="ship-symbol">⚑</span><div><span>YOUR SHIP</span><h2 id="ship-name">The Black Pearl</h2></div><span class="ship-class">GALLEON</span></div><div class="hull-info"><span>HULL INTEGRITY</span><b id="hull-text">100%</b></div><div class="hull-track"><div id="hull-bar"></div></div><div class="ship-stats"><div><span id="speed">0.0</span><small>KNOTS</small></div><div><span id="cannon-count">28</span><small>CANNONS</small></div><div><span id="heading">SE</span><small>HEADING</small></div></div><button id="fleet-button" class="fleet-control"><span id="class-label">GALLEON · 3 MASTS</span><span>CHANGE SHIP ↗</span></button><button id="shop-button" class="fleet-control"><span>UPGRADE SHOP</span><span>OUTFIT SHIP [O]</span></button><button id="harbor-button" class="repair" hidden>Harbour services <kbd>F</kbd></button><button id="repair" class="repair" hidden>Repair at Nassau · ◈ 100 <kbd>R</kbd></button></section>
+    <div class="center-bottom"><div id="toast" class="toast" role="status">Raise the sails, Captain. A fortune awaits.</div><div class="helm panel"><button id="sails" class="sail-control"><span class="sail-icon">◭</span><span><small>SAILS</small><strong id="sail-state">Furled</strong></span><kbd>W / S</kbd></button><span class="divider"></span><button id="fire" class="fire-control"><span>⚔</span><span><strong>Fire broadside</strong><small id="reload-state">CANNONS READY</small></span><kbd>SPACE</kbd><i id="reload-bar"></i></button></div><div class="colours-control"><button id="colours-button" aria-pressed="false" title="False colours / hoist the Jolly Roger (C)">⚑ Fly false colours [C]</button><small id="colours-status">JOLLY ROGER · PIRATE COLOURS</small></div><div class="keyboard-hints"><span><kbd>A</kbd><kbd>D</kbd> steer</span><span><span class="mouse-icon">♧</span> click sea to sail</span><button id="help">Captain’s guide <span>?</span></button></div></div>
+    <aside class="map-panel panel"><button id="map-button" class="map-title"><span>CHARTED WATERS</span><span>⛶ <kbd>M</kbd></span></button><canvas id="minimap" width="240" height="174" aria-label="Map showing your ship, islands, navy patrols, and treasure"></canvas><div class="map-footer"><span><i></i> NASSAU</span><span id="coordinates">25°04′ N · 77°20′ W</span></div></aside>
+    <div class="touch-steer"><button data-key="KeyA" aria-label="Steer left">↶</button><button data-key="KeyD" aria-label="Steer right">↷</button></div>
+    <dialog id="modal"><button id="close-modal" class="close-modal" aria-label="Close">×</button><div id="modal-content"></div></dialog>
+    <div id="loading"><div class="loading-crest">⚓</div><h2>VOXEL GALLEONS</h2><p>Charting a course for the Caribbean…</p></div>
+    <div id="error" hidden><h2>Unable to set sail</h2><p>This game needs WebGL 2. Try a browser with hardware acceleration enabled.</p><button onclick="location.reload()">Try again</button></div>
+  </main>
+  <script type="module" src="/game.js"></script>
+</body>
+</html>
