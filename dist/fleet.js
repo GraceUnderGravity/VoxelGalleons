@@ -34,14 +34,15 @@ export function makeShipClass(id='galleon',navy=false){
     }
   }
   // Actual gun ports, inner carriages, banded muzzles and individual lids.
-  for(const side of [-1,1])for(const z of guns){const w=width(z);
+  for(const side of [-1,1])for(const [gunIndex,z] of guns.entries()){const w=width(z),stationIndex=guns.length-1-gunIndex;
     v.box(side*(w-.18),gunY,z,.17,.71,.77,'#192520');
     for(const zz of [-.40,.40])v.box(side*(w+.035),gunY,z+zz,.13,.83,.10,wale);
     v.box(side*(w+.02),gunY-.39,z,.17,.11,.87,wale);
     v.box(side*(w+.11),gunY+.46,z,.55,.10,.85,pick(wood),0,0,side*.22);
+    v.tag=`support:${side}:${stationIndex}`;v.box(side*(w-.50),gunY-.43,z,1.25,.16,.77,'#6a492c');v.tag=`gun:${side}:${stationIndex}`;
     v.box(side*(w-.50),gunY-.05,z,.66,.36,.62,'#6a492c');
     v.box(side*(w+.13),gunY,z,.99,.23,.28,'#313c36');v.box(side*(w+.52),gunY,z,.10,.31,.34,'#575c4c');v.box(side*(w+.58),gunY,z,.02,.16,.19,'#121e1a');
-    for(const zz of [-.31,.31])v.box(side*(w-.48),gunY-.22,z+zz,.20,.27,.13,'#4d432e');
+    for(const zz of [-.31,.31])v.box(side*(w-.48),gunY-.22,z+zz,.20,.27,.13,'#4d432e');v.tag=null;
   }
   // Raked stem, headrails, figurehead and bowsprit bindings.
   for(let j=0;j<9;j++)v.box(0,.32+j*.32,-L/2-.08-j*.022,.24,.34,.29,pick(wood));

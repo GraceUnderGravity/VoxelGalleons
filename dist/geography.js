@@ -1,3 +1,4 @@
+import {TOWN_PLOTS} from './town-plots.js';
 export const ISLANDS=[
  {x:-90,z:-70,r:46,name:'NASSAU',kind:'pirate-port',port:true,repairCost:100,seed:0,peak:13},
  {x:78,z:-100,r:43,name:'FORT CROWN',kind:'navy-fort',seed:1,peak:19},
@@ -15,7 +16,7 @@ export function harborApproach(island){const p=harborLocal(island);return{x:isla
 export function fortLocal(island){return{x:island.r*.66,z:island.r*.25};}
 export function fortPosition(island){const p=fortLocal(island);return{x:island.x+p.x,z:island.z+p.z};}
 const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
-export function terrainHeight(island,x,z){
+function rawTerrainHeight(island,x,z){
  const d=shoreDistance(island,x,z),depth=-d;
  if(d>0)return -.30-d*.24;
  if(depth<4)return -.30+depth*.18;
@@ -27,4 +28,11 @@ export function terrainHeight(island,x,z){
  h+=(island.peak||15)*(hill*.9+ridge*.57)*smooth((depth-6)/14);
  if(island.kind==='navy-fort'){const p=fortLocal(island),blend=1-smooth((Math.hypot(x-p.x,z-p.z)-10)/6);h=h*(1-blend)+2.3*blend;}
  return h;
+}
+const terraces=new WeakMap();
+export function terrainHeight(island,x,z){
+ const base=rawTerrainHeight(island,x,z);if(island.kind==='navy-fort'||shoreDistance(island,x,z)>-3)return base;
+ if(!terraces.has(island)){const shore=harborLocal(island);terraces.set(island,TOWN_PLOTS.map(([,px,pz,w,d])=>({x:px+shore.x,z:pz+shore.z-16,w,d})).filter(p=>shoreDistance(island,p.x,p.z)<-5).map(p=>({...p,y:rawTerrainHeight(island,p.x,p.z)})));}
+ for(const p of terraces.get(island)){const edge=Math.max(Math.abs(x-p.x)-p.w/2,Math.abs(z-p.z)-p.d/2);if(edge<1.8){const blend=1-smooth((edge-.6)/1.2);return base*(1-blend)+p.y*blend;}}
+ return base;
 }

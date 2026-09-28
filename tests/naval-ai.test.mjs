@@ -51,3 +51,11 @@ test('live simulation trades naval broadsides without deliberate ramming',()=>{
 test('forts respect a false ensign but remember hostile acts',()=>{
  const s=createState();s.x=0;s.z=0;s.forts=[{id:'test',x:40,z:0,hull:100,cooldown:0}];s.enemies=[];toggleColours(s);assert.equal(recognizesPirate(s,s.forts[0]),false);fireBroadside(s);assert.equal(s.forts[0].alerted,true);toggleColours(s);assert.equal(recognizesPirate(s,s.forts[0]),true);
 });
+test('an oblique target offering several hull hits is worth a broadside',()=>{
+ const e=ship({x:0,z:0,vz:0,speed:0}),target=ship({id:'player',x:35,z:-16,vz:0,speed:0});
+ assert.ok(Math.abs(Math.sin(Math.atan2(35,16)))<.94,'this opportunity was excluded by the old angle gate');assert.equal(broadsideClear(e,target,[e,target],[]),true);
+});
+test('a ship can shoot while giving way if its guns bear on a clear target',()=>{
+ const s=createState();Object.assign(s,{x:0,z:0,angle:0,time:2,started:true});s.forts=[];s.enemies=[ship({x:26,z:0,angle:0,vx:0,vz:0,speed:0,cooldown:0,alerted:true})];
+ step(s,.016);assert.equal(s.enemies[0].tactic,'give-way');assert.ok(s.events.some(e=>e.type==='order'&&e.enemy));assert.equal(s.salvos.length,25);
+});

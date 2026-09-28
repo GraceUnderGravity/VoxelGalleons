@@ -1,10 +1,13 @@
-import {surfaceHeight} from './sea-state.js';
+import {crewResolve,abandonShip,evacuateTown,updateEvacuation,hitPeople,killPerson,groundImpact} from './evacuation.js';
+import {aimCannon,SHOT_GRAVITY} from './gunnery.js';
+import {surfaceHeight,wavePose} from './sea-state.js';
 import {navalHelm,broadsideClear} from './naval-ai.js';
 import {hoistPirateColours,recognizesPirate} from './colours.js';
-import { SHIP_CLASSES } from './ship-classes.js';
+import { SHIP_CLASSES,gunStations } from './ship-classes.js';
 import {resolveShipContacts,closestHullPoint,resolveShoreContact} from './collisions.js';
 import {upgradeEffects,grantUpgrade,purchaseUpgrade,UPGRADES} from './upgrades.js';
 import {ISLANDS,PORT,coastRadius,harborApproach,fortPosition} from './geography.js';
+import {BUILDINGS,firstLandHit,segmentBox} from './settlements.js';
 export {ISLANDS,PORT} from './geography.js';
 export const WORLD_LIMIT=320;
 export const RELOAD_TIME=6.2;
@@ -14,20 +17,26 @@ export function angleDelta(a,b){return Math.atan2(Math.sin(a-b),Math.cos(a-b));}
 export function distance(a,b){return Math.hypot(a.x-b.x,a.z-b.z);}
 export function headingTo(a,b){return Math.atan2(b.x-a.x,-(b.z-a.z));}
 export function waveHeight(x,z,t){return surfaceHeight(x,z,t);}
-export function createState(shipClass='galleon'){
-  return {colours:'pirate',shipClass,...harborApproach(PORT),angle:1.98,speed:0,vx:0,vz:0,angularVelocity:0,rudder:0,heel:0,heelVelocity:0,pitch:0,throttle:0,hull:100,gold:0,cargo:0,sunk:0,cooldown:0,time:0,damageGrace:0,status:'playing',started:false,target:null,collected:new Set(),upgrades:{},cannonRefit:false,forts:ISLANDS.filter(i=>i.kind==='navy-fort').map(i=>({id:'fort-'+i.seed,islandSeed:i.seed,...fortPosition(i),hull:210,maxHull:210,cooldown:8,staticFort:true,angle:0})),salvos:[],shotSequence:0,collisionCooldowns:{},
-    enemies:[{id:0,shipClass:'brig',x:55,z:24,angle:-1.4,hull:100,maxHull:100,cooldown:5,homeX:55,homeZ:24},{id:1,shipClass:'frigate',x:-65,z:100,angle:.5,hull:135,maxHull:135,cooldown:8,homeX:-65,homeZ:100},{id:2,shipClass:'galleon',x:0,z:-120,angle:2.3,hull:180,maxHull:180,cooldown:9,homeX:0,homeZ:-120}],projectiles:[],events:[]};
+export function disableCannon(s,body,id){
+ const [side,index]=id.split(':').map(Number),spec=SHIP_CLASSES[body.shipClass];if(![-1,1].includes(side)||!Number.isInteger(index)||index<0||index>=spec.cannons/2)return false;
+ body.disabledGuns??=new Set();if(body.disabledGuns.has(id))return false;body.disabledGuns.add(id);
+ const owner=body===s?'player':body.id;s.salvos=s.salvos.filter(g=>g.owner!==owner||`${g.side}:${g.gun}`!==id);
+ s.events.push({type:'gun-disabled',target:owner,gun:id});return true;
+}
+export function createState(shipClass='galleon',voyageSeed=1715){
+  return {civilians:[],rowboats:[],civilianSequence:0,boatSequence:0,rescuedCrew:0,colours:'pirate',shipClass,...harborApproach(PORT),angle:1.98,speed:0,vx:0,vz:0,angularVelocity:0,rudder:0,heel:0,heelVelocity:0,pitch:0,throttle:0,hull:100,gold:0,cargo:0,sunk:0,cooldown:0,time:0,damageGrace:0,status:'playing',started:false,target:null,collected:new Set(),upgrades:{},cannonRefit:false,forts:ISLANDS.filter(i=>i.kind==='navy-fort').map(i=>({id:'fort-'+i.seed,islandSeed:i.seed,...fortPosition(i),hull:210,maxHull:210,cooldown:8,staticFort:true,angle:0})),salvos:[],shotSequence:0,collisionCooldowns:{},
+    buildingImpactSequence:0,buildings:BUILDINGS.map(b=>({...b,hull:b.maxHull,fireRemaining:0})),enemies:[{id:0,abandonRoll:crewResolve(voyageSeed,0),shipClass:'brig',x:55,z:24,angle:-1.4,hull:100,maxHull:100,cooldown:5,homeX:55,homeZ:24},{id:1,abandonRoll:crewResolve(voyageSeed,1),shipClass:'frigate',x:-65,z:100,angle:.5,hull:135,maxHull:135,cooldown:8,homeX:-65,homeZ:100},{id:2,abandonRoll:crewResolve(voyageSeed,2),shipClass:'galleon',x:0,z:-120,angle:2.3,hull:180,maxHull:180,cooldown:9,homeX:0,homeZ:-120}],projectiles:[],events:[]};
 }
 export function setSails(s,value){if(s.status!=='playing')return;s.throttle=Math.max(0,Math.min(3,value));if(s.throttle>0)s.started=true;if(s.throttle===0)s.target=null;}
 export function steerTo(s,x,z){if(s.status!=='playing'||!Number.isFinite(x)||!Number.isFinite(z))return false;s.started=true;s.target={x:Math.max(-WORLD_LIMIT,Math.min(WORLD_LIMIT,x)),z:Math.max(-WORLD_LIMIT,Math.min(WORLD_LIMIT,z))};s.throttle=3;return true;}
 export function nearPort(s){return distance(s,harborApproach(PORT))<21;}
 export function nearestHarbor(s){return ISLANDS.filter(i=>i.port&&distance(s,harborApproach(i))<21).sort((a,b)=>distance(s,harborApproach(a))-distance(s,harborApproach(b)))[0]||null;}
-export function repair(s){const port=nearestHarbor(s);if(s.status!=='playing'||!port||s.gold<port.repairCost||s.hull>=100)return false;s.gold-=port.repairCost;s.hull=100;s.events.push({type:'repair'});return true;}
-export function changeShipClass(s,id){if(!Object.hasOwn(SHIP_CLASSES,id)||s.status!=='playing')return false;s.shipClass=id;s.speed=0;s.vx=0;s.vz=0;s.angularVelocity=0;s.heel=0;s.heelVelocity=0;s.throttle=0;s.target=null;s.salvos=s.salvos.filter(b=>b.owner!=='player');return true;}
+export function repair(s){const port=nearestHarbor(s);if(s.status!=='playing'||!port||s.gold<port.repairCost||s.hull>=100&&!s.disabledGuns?.size)return false;s.gold-=port.repairCost;s.hull=100;s.disabledGuns=new Set();s.events.push({type:'repair'});return true;}
+export function changeShipClass(s,id){if(!Object.hasOwn(SHIP_CLASSES,id)||s.status!=='playing')return false;s.shipClass=id;s.disabledGuns=new Set();s.speed=0;s.vx=0;s.vz=0;s.angularVelocity=0;s.heel=0;s.heelVelocity=0;s.throttle=0;s.target=null;s.salvos=s.salvos.filter(b=>b.owner!=='player');return true;}
 
-// A broadside is an order to the gun crews. Each crew fires separately within one second.
+// A broadside is an order to the crews. The galleon's fifty guns use a longer ripple.
 export function fireBroadside(s,side='auto',owner=s){
-  if(s.status!=='playing'||owner.cooldown>0)return false;if(owner===s)hoistPirateColours(s);s.started=true;
+  if(s.status!=='playing'||owner.cooldown>0||owner.abandoned)return false;if(owner===s)hoistPirateColours(s);s.started=true;
   const spec=SHIP_CLASSES[owner===s?s.shipClass:(owner.shipClass||'brig')];
   let direction=side==='port'?-1:1;
   if(side==='auto'){
@@ -35,36 +44,55 @@ export function fireBroadside(s,side='auto',owner=s){
     const nearest=targets.reduce((best,e)=>!best||distance(owner,e)<distance(owner,best)?e:best,null);
     if(nearest)direction=Math.sign(Math.sin(headingTo(owner,nearest)-owner.angle))||1;
   }
+  if(owner.disabledGuns?.size&&gunStations(owner.shipClass).every((_,i)=>owner.disabledGuns.has(`${direction}:${i}`)))return false;
   const random=seeded(1715+(s.shotSequence++)*733+Math.floor(s.time*100));
-  const shots=spec.cannons/2,order=Array.from({length:shots},(_,i)=>i);
+  const shots=spec.cannons/2,stations=gunStations(owner.shipClass||'brig'),duration=spec.broadsideDuration||1,order=Array.from({length:shots},(_,i)=>i);
   for(let i=shots-1;i>0;i--){const j=Math.floor(random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
-  order.forEach((gun,index)=>{const galleon=spec.name==='Galleon',upper=galleon&&gun>=7;const along=galleon?(6-(gun%7)*1.8)*spec.modelScale:(gun-(shots-1)/2)*(spec.length*.64/(shots-1));const muzzleY=(galleon?(upper?4.1:2.46):spec.name==='Sloop'?1.65:spec.name==='Brig'?2.1:2.4)*spec.modelScale;s.salvos.push({owner:owner===s?'player':owner.id,side:direction,gun,shots,along,beam:spec.width/2+(upper?.04:.45)*spec.modelScale,muzzleY,damage:owner===s?spec.damage*upgradeEffects(s).damage:spec.damage*.60,fireAt:s.time+.045+index*(.78/Math.max(1,shots-1))+random()*.11,seed:Math.floor(random()*1e8)});});
+  order.forEach((gun,index)=>{if(!owner.disabledGuns?.has(`${direction}:${gun}`))s.salvos.push({owner:owner===s?'player':owner.id,side:direction,gun,shots,...stations[gun],damage:owner===s?spec.damage*upgradeEffects(s).damage:spec.damage*.60,recoil:spec.name==='Galleon'?14/25:1,fireAt:s.time+.035+index*((duration-.15)/Math.max(1,shots-1))+random()*.10,seed:Math.floor(random()*1e8)});});
   owner.cooldown=owner===s?RELOAD_TIME*upgradeEffects(s).reload:9;
   s.events.push({type:'order',enemy:owner!==s});return true;
 }
 function discharge(s,gun){
-  const owner=gun.owner==='player'?s:[...s.enemies,...s.forts].find(e=>e.id===gun.owner&&e.hull>0);if(!owner)return;
+  const owner=gun.owner==='player'?s:[...s.enemies,...s.forts].find(e=>e.id===gun.owner&&e.hull>0);if(!owner||owner.abandoned||owner.disabledGuns?.has(`${gun.side}:${gun.gun}`))return;
   const random=seeded(gun.seed),a=gun.fixedAngle??(owner.angle+gun.side*Math.PI/2);
   const x=gun.fixedX??(owner.x+Math.sin(owner.angle)*gun.along+Math.sin(a)*gun.beam),z=gun.fixedZ??(owner.z-Math.cos(owner.angle)*gun.along-Math.cos(a)*gun.beam);
   // Independent lateral spread, barrel elevation, and powder charge. Movement worsens aim.
   const spread=.065+(owner.speed||3)/14*.045+Math.abs(owner.heel||0)*.35;
   const aim=a+(random()+random()-1)*spread*1.5,velocity=20.5+random()*5;
-  s.projectiles.push({x,z,y:gun.muzzleY+(owner.staticFort?0:waveHeight(owner.x,owner.z,s.seaTime??s.time)*.88),vx:Math.sin(aim)*velocity+(owner.vx||0)*.30,vz:-Math.cos(aim)*velocity+(owner.vz||0)*.30,vy:owner.staticFort?-1.6-random()*.6:.2+random()*1.05,life:2.8,owner:gun.owner,damage:gun.damage});
-  s.events.push({type:'cannon',x,z,y:gun.muzzleY+(owner.staticFort?0:waveHeight(owner.x,owner.z,s.seaTime??s.time)*.88),dx:Math.sin(a),dz:-Math.cos(a),enemy:owner!==s,gun:gun.gun,owner:gun.owner});
-  if(owner===s){const mass=SHIP_CLASSES[s.shipClass].mass;s.vx-=Math.sin(a)*.045/mass;s.vz-=Math.cos(a)*-.045/mass;s.heelVelocity+=gun.side*.007/mass;}
+  const pose=owner.staticFort?null:wavePose(owner,SHIP_CLASSES[owner.shipClass||'brig'],s.seaTime??s.time);
+  const muzzleY=gun.muzzleY+(pose?pose.y+gun.along*Math.sin(pose.pitch)+gun.side*gun.beam*Math.sin(pose.roll):0);
+  const elevation=owner.staticFort?{vy:-1.6-random()*.6,elevation:0}:aimCannon(s,owner,{x,y:muzzleY,z,dx:Math.sin(aim),dz:-Math.cos(aim),speed:velocity},random);
+  s.projectiles.push({x,z,y:muzzleY,vx:Math.sin(aim)*velocity+(owner.vx||0)*.30,vz:-Math.cos(aim)*velocity+(owner.vz||0)*.30,vy:elevation.vy,life:2.8,owner:gun.owner,damage:gun.damage});
+  s.events.push({type:'cannon',x,z,y:muzzleY,dx:Math.sin(a),dz:-Math.cos(a),elevation:elevation.elevation,side:gun.side,enemy:owner!==s,gun:gun.gun,owner:gun.owner});
+  if(owner===s){const mass=SHIP_CLASSES[s.shipClass].mass,recoil=gun.recoil??1;s.vx-=Math.sin(a)*.045*recoil/mass;s.vz-=Math.cos(a)*-.045*recoil/mass;s.heelVelocity+=gun.side*.007*recoil/mass;}
 }
-function hitHull(b,target,fromX,fromZ,seaTime){
-  if(target.staticFort)return Math.hypot(b.x-target.x,b.z-target.z)<9.2&&(b.y??2)>1.2&&(b.y??2)<7.6;
-  const localY=(b.y??2)-waveHeight(target.x,target.z,seaTime)*.88;
-  if(localY>4.8*SHIP_CLASSES[target.shipClass||'brig'].modelScale||localY<-.2)return false;
+function hitHull(b,target,from,seaTime){
+  if(target.staticFort)return segmentBox(from,b,{minX:target.x-9.2,maxX:target.x+9.2,minZ:target.z-9.2,maxZ:target.z+9.2,minY:1.2,maxY:7.6});
+  const pose=wavePose(target,SHIP_CLASSES[target.shipClass||'brig'],seaTime);
   const spec=SHIP_CLASSES[target.shipClass||'brig'];
-  // Swept line segment in ship-local coordinates, against an elliptical hull footprint.
+  // First contact along the entire 3D flight segment, including hull heave and heel.
   const rx=spec.width*.5+.22,rz=spec.length*.43;
-  const local=(x,z)=>({x:((x-target.x)*Math.cos(target.angle)+(z-target.z)*Math.sin(target.angle))/rx,z:((x-target.x)*Math.sin(target.angle)-(z-target.z)*Math.cos(target.angle))/rz});
-  const a=local(fromX,fromZ),c=local(b.x,b.z),dx=c.x-a.x,dz=c.z-a.z,l=dx*dx+dz*dz,t=l?Math.max(0,Math.min(1,-(a.x*dx+a.z*dz)/l)):0;
-  return Math.hypot(a.x+dx*t,a.z+dz*t)<1;
+  const local=p=>{const across=(p.x-target.x)*Math.cos(target.angle)+(p.z-target.z)*Math.sin(target.angle),along=(p.x-target.x)*Math.sin(target.angle)-(p.z-target.z)*Math.cos(target.angle);return{x:across/rx,z:along/rz,y:p.y-pose.y-along*Math.sin(pose.pitch)-across*Math.sin(pose.roll)};};
+  const a=local(from),c=local(b),dx=c.x-a.x,dz=c.z-a.z,dy=c.y-a.y,A=dx*dx+dz*dz,B=2*(a.x*dx+a.z*dz),C=a.x*a.x+a.z*a.z-1;
+  let enter=0,exit=1;
+  if(A<1e-12){if(C>0)return null;}else{const discriminant=B*B-4*A*C;if(discriminant<0)return null;const root=Math.sqrt(discriminant);enter=Math.max(enter,(-B-root)/(2*A));exit=Math.min(exit,(-B+root)/(2*A));}
+  if(Math.abs(dy)<1e-9){if(a.y<-.2||a.y>4.8*spec.modelScale)return null;}else{let lo=(-.2-a.y)/dy,hi=(4.8*spec.modelScale-a.y)/dy;if(lo>hi)[lo,hi]=[hi,lo];enter=Math.max(enter,lo);exit=Math.min(exit,hi);}
+  return enter<=exit?enter:null;
 }
-function sinkEnemy(s,e){e.wreckAge=0;e.speed*=.35;e.vx=(e.vx||0)*.35;e.vz=(e.vz||0)*.35;s.sunk++;s.gold+=300;s.events.push({type:'sunk',id:e.id,x:e.x,z:e.z});}
+function hitCannons(to,target,from,time){
+ if(target.staticFort)return null;const spec=SHIP_CLASSES[target.shipClass],pose=wavePose(target,spec,time);
+ const local=p=>{const x=(p.x-target.x)*Math.cos(target.angle)+(p.z-target.z)*Math.sin(target.angle),z=(p.x-target.x)*Math.sin(target.angle)-(p.z-target.z)*Math.cos(target.angle);return{x,z,y:p.y-pose.y-z*Math.sin(pose.pitch)-x*Math.sin(pose.roll)};};
+ const a=local(from),b=local(to),stations=gunStations(target.shipClass);let nearest=null;
+ for(const side of [-1,1])for(const [i,gun] of stations.entries()){
+  const id=`${side}:${i}`;if(target.disabledGuns?.has(id))continue;
+  const x=side*(gun.beam-.42*spec.modelScale),r=.40*spec.modelScale;
+  const t=segmentBox(a,b,{minX:x-.64*spec.modelScale,maxX:x+.64*spec.modelScale,minY:gun.muzzleY-r,maxY:gun.muzzleY+r,minZ:gun.along-r,maxZ:gun.along+r});
+  if(t!==null&&(!nearest||t<nearest.t))nearest={t,gun:id};
+ }
+ return nearest;
+}
+function sinkEnemy(s,e){if(e.wreckAge!==undefined)return;e.wreckAge=0;e.speed*=.35;e.vx=(e.vx||0)*.35;e.vz=(e.vz||0)*.35;s.sunk++;s.gold+=300;s.events.push({type:'sunk',id:e.id,x:e.x,z:e.z});}
+function collapseBuilding(s,building){building.fireRemaining=Math.min(12,building.fireRemaining||0);s.events.push({type:'building-destroyed',target:building.id,name:building.name,x:building.x,y:building.y,z:building.z});}
 export function step(s,dt,input={}){
   if(s.status!=='playing')return;if(!s.started){if(input.left||input.right)s.started=true;else return;}
   dt=Math.min(.05,Math.max(0,dt));s.time+=dt;s.cooldown=Math.max(0,s.cooldown-dt);s.damageGrace=Math.max(0,s.damageGrace-dt);
@@ -90,6 +118,8 @@ export function step(s,dt,input={}){
   CARGO.forEach((c,i)=>{if(!s.collected.has(i)&&distance(s,c)<7){s.collected.add(i);s.cargo++;s.gold+=150;s.hull=Math.min(100,s.hull+6);s.events.push({type:'cargo',x:c.x,z:c.z});}});
   for(const e of s.enemies){
     if(e.hull<=0){e.wreckAge=(e.wreckAge||0)+dt;e.vx=(e.vx||0)*Math.exp(-dt*.65);e.vz=(e.vz||0)*Math.exp(-dt*.65);e.x+=e.vx*dt;e.z+=e.vz*dt;continue;}e.cooldown=Math.max(0,e.cooldown-dt);
+    abandonShip(s,e);
+    if(e.abandoned){e.scuttleTime+=dt;e.speed=(e.speed||0)*Math.exp(-dt);e.vx=(e.vx||0)*Math.exp(-dt);e.vz=(e.vz||0)*Math.exp(-dt);e.x+=e.vx*dt;e.z+=e.vz*dt;if(e.scuttleTime>4)e.hull=Math.max(0,e.hull-e.scuttleHull*dt/14);if(e.hull===0)sinkEnemy(s,e);continue;}
     const hostile=recognizesPirate(s,e),helm=navalHelm(e,s,[s,...s.enemies],ISLANDS,s.time,hostile),mass=SHIP_CLASSES[e.shipClass].mass;
     e.tactic=helm.mode;
     e.angularVelocity=(e.angularVelocity||0)+(helm.turn-(e.angularVelocity||0))*Math.min(1,dt*1.25/Math.sqrt(mass));
@@ -98,7 +128,7 @@ export function step(s,dt,input={}){
     e.vx=(e.vx||0)+(Math.sin(e.angle)*e.speed-(e.vx||0))*dt*1.6/mass;
     e.vz=(e.vz||0)+(-Math.cos(e.angle)*e.speed-(e.vz||0))*dt*1.6/mass;e.x+=e.vx*dt;e.z+=e.vz*dt;
     for(const island of ISLANDS){if(resolveShoreContact(e,island)){e.vx*=.4;e.vz*=.4;e.speed*=.7;}}
-    if(hostile&&s.time>12&&s.time>(e.surprisedUntil||0)&&!helm.evade&&broadsideClear(e,s,s.enemies,ISLANDS))fireBroadside(s,'auto',e);
+    if(hostile&&e.cooldown===0&&s.time>(e.surprisedUntil||0)&&broadsideClear(e,s,s.enemies,ISLANDS))fireBroadside(s,'auto',e);
 
   }
   const bodies=[s,...s.enemies.filter(e=>e.hull>0||(e.wreckAge??99)<3.4)];
@@ -113,13 +143,36 @@ export function step(s,dt,input={}){
     }
   }
   for(const fort of s.forts){if(fort.hull<=0)continue;fort.cooldown=Math.max(0,fort.cooldown-dt);if(recognizesPirate(s,fort)&&distance(s,fort)<61&&s.time>12&&s.time>(fort.surprisedUntil||0)&&fort.cooldown===0)fireFort(s,fort);}
+  for(const body of [s,...s.enemies])wavePose(body,SHIP_CLASSES[body.shipClass],s.seaTime??s.time);
+  for(const building of s.buildings){
+   if(!(building.fireRemaining>0))continue;
+   building.fireRemaining=Math.max(0,building.fireRemaining-dt);
+   if(building.hull>0){building.hull=Math.max(0,building.hull-dt*1.25);if(building.hull===0)collapseBuilding(s,building);}
+  }
   const pending=[];for(const gun of s.salvos){if(gun.fireAt<=s.time)discharge(s,gun);else pending.push(gun);}s.salvos=pending;
   const alive=[];
-  for(const b of s.projectiles){const ox=b.x,oz=b.z;b.x+=b.vx*dt;b.z+=b.vz*dt;b.y=(b.y??2)+(b.vy||0)*dt;b.vy=(b.vy||0)-1.9*dt;b.life-=dt;let hit=false;
+  for(const b of s.projectiles){const from={x:b.x,y:b.y??2,z:b.z};b.x+=b.vx*dt;b.z+=b.vz*dt;b.y=(b.y??2)+(b.vy||0)*dt;b.vy=(b.vy||0)-SHOT_GRAVITY*dt;b.life-=dt;let hit=false;
+    let contact=firstLandHit(from,b,s.buildings),target=null;const person=hitPeople(s,from,b,s.seaTime??s.time);if(person&&(!contact||person.t<contact.t))contact=person;
     const targets=b.owner==='player'?[...s.enemies,...s.forts].filter(e=>e.hull>0):[s];
-    for(const target of targets){if(hitHull(b,target,ox,oz,s.seaTime??s.time)){if(target!==s)target.alerted=true;target.hull-=b.owner==='player'?(b.damage||24):(b.damage||5)*100/(spec.hull*upgrades.hull);s.events.push({type:'hit',target:target===s?'player':target.id,x:b.x,z:b.z,y:b.y,dx:b.vx,dz:b.vz,fort:!!target.staticFort,enemy:target!==s});if(target!==s&&target.hull<=0){if(target.staticFort){s.gold+=400;s.events.push({type:'fort-silenced',id:target.id,x:target.x,z:target.z});}else sinkEnemy(s,target);}hit=true;break;}}
+    for(const candidate of targets){let t=hitHull(b,candidate,from,s.seaTime??s.time),gun=null;const cannon=hitCannons(b,candidate,from,s.seaTime??s.time);if(cannon&&(t===null||cannon.t<=t)){t=cannon.t;gun=cannon.gun;}if(t!==null&&(!contact||t<contact.t)){contact={t,gun};target=candidate;}}
+    if(contact){
+     b.x=from.x+(b.x-from.x)*contact.t;b.y=from.y+(b.y-from.y)*contact.t;b.z=from.z+(b.z-from.z)*contact.t;hit=true;
+     if(contact.npc)killPerson(s,contact.npc,b);
+     else if(target){if(target!==s)target.alerted=true;target.hull-=b.owner==='player'?(b.damage||24):(b.damage||5)*100/(spec.hull*upgrades.hull);s.events.push({type:'hit',target:target===s?'player':target.id,x:b.x,z:b.z,y:b.y,dx:b.vx,dz:b.vz,fort:!!target.staticFort,enemy:target!==s});if(contact.gun)disableCannon(s,target,contact.gun);if(target!==s&&target.hull<=0){if(target.staticFort){s.gold+=400;s.events.push({type:'fort-silenced',id:target.id,x:target.x,z:target.z});}else sinkEnemy(s,target);}}
+     else{
+      const building=contact.building,standing=building?.hull>0;
+      if(standing){building.hull=Math.max(0,building.hull-(b.damage??5));evacuateTown(s,building);}
+      s.events.push({type:standing?'building-hit':'ground-hit',target:building?.id,x:b.x,y:b.y,z:b.z,dx:b.vx,dz:b.vz});if(!standing)groundImpact(s,b);
+      if(standing&&building.hull===0)collapseBuilding(s,building);
+      else if(standing&&building.flammable&&!(building.fireRemaining>0)){
+       const r=seeded(9271+(s.buildingImpactSequence++)*733+building.islandSeed*173+Math.floor(s.time*100));
+       if(r()<.35||building.hull<building.maxHull*.60){building.fireRemaining=28+r()*12;s.events.push({type:'building-ignited',target:building.id,name:building.name});}
+      }
+     }
+    }
     if(!hit&&b.life>0&&b.y>waveHeight(b.x,b.z,s.seaTime??s.time)-.2)alive.push(b);else if(!hit)s.events.push({type:'splash',x:b.x,z:b.z});
   }s.projectiles=alive;
+  updateEvacuation(s,dt);
   if(s.hull<=0){s.hull=0;s.status='lost';s.events.push({type:'lost'});}else if(s.cargo>=5&&s.sunk>=2&&nearPort(s)){s.status='won';s.gold+=1000;s.events.push({type:'won'});}
 }
 
@@ -128,10 +181,12 @@ export function buyCannonRefit(s){return nearestHarbor(s)?.kind==='black-market'
 export function devAction(s,action,id){
  if(s.status!=='playing')return false;
  if(action==='gold')s.gold+=1000;
- else if(action==='repair'){s.hull=100;s.events.push({type:'repair'});}
+ else if(action==='repair'){s.hull=100;s.disabledGuns=new Set();s.events.push({type:'repair'});}
  else if(action==='upgrade')return grantUpgrade(s,id);
  else if(action==='max'){for(const key of Object.keys(UPGRADES))while(grantUpgrade(s,key)){};}
  else if(action==='reset'){s.upgrades={};s.cannonRefit=false;}
+ else if(action==='evacuate'){const port=nearestHarbor(s)||PORT,b=s.buildings.filter(b=>b.islandSeed===port.seed&&b.hull>0).sort((a,b)=>distance(a,s)-distance(b,s))[0];if(!b)return false;s.started=true;evacuateTown(s,b);}
+ else if(action==='abandon'){const e=s.enemies.filter(e=>e.hull>0&&!e.abandoned).sort((a,b)=>distance(a,s)-distance(b,s))[0];if(!e)return false;e.hull=Math.min(e.hull,e.maxHull*.25);s.started=true;if(!abandonShip(s,e,{force:true}))return false;}
  else if(action==='harbor'){const port=ISLANDS.find(i=>i.port&&i.seed===Number(id));if(!port)return false;Object.assign(s,harborApproach(port),{speed:0,vx:0,vz:0,angularVelocity:0,throttle:0,target:null});}
  else return false;
  return true;

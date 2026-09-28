@@ -3,7 +3,10 @@ import {seaState} from './sea-state.js';
 
 export function weatherAt(time){
  const squall=.5+.5*Math.sin(time*.025-.45),gust=.5+.5*Math.sin(time*.73)*Math.sin(time*.19);
- return {rain:seaState.rain*(.7+squall*.3),wind:seaState.wind*(.8+gust*.4),light:1.95-seaState.rain*squall*.75+Math.sin(time*.09)*.10,mist:.0017+seaState.rain*squall*.0010};
+ const wind=seaState.wind*(.8+gust*.4);
+ // A north-easterly blows southwest: negative world X, positive world Z.
+ // Transport velocity is shared by fresh powder, fire smoke and old battle haze.
+ return {rain:seaState.rain*(.7+squall*.3),wind,windX:-Math.SQRT1_2*wind*1.9,windZ:Math.SQRT1_2*wind*1.9,light:1.95-seaState.rain*squall*.75+Math.sin(time*.09)*.10,mist:.0017+seaState.rain*squall*.0010};
 }
 
 // Multisampled HDR scene, half-resolution bloom, then restrained cinematic grading.

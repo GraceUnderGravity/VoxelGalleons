@@ -29,6 +29,16 @@ const fragmentShader=`
  void main(){
   #include <clipping_planes_fragment>
   vec2 q=(vUv-.5)*2.;float age=vState.x;
+  if(vState.w>2.5){
+   float height=q.x*.5+.5;
+   float bend=sin(height*8.-age*15.+vSeed)*.12*height;
+   float width=max(.045,.58*(1.-height));
+   float body=1.-smoothstep(width*.38,width,abs(q.y-bend));
+   float flicker=fbm(vec2(q.y*5.+vSeed,height*6.-age*9.));
+   float alpha=body*smoothstep(0.,.15,height)*(1.-smoothstep(.7,1.,height))*(.55+.45*flicker)*vState.z;
+   vec3 fire=mix(vec3(.94,.14,.015),vec3(1.,.61,.12),body*(1.-height*.65));
+   if(alpha<.004)discard;gl_FragColor=vec4(fire,alpha);return;
+  }
   if(vState.w>.5){
    float r=length(q*vec2(.80,1.35));float core=exp(-r*r*12.);float flame=exp(-r*r*4.5)*(1.-smoothstep(.6,1.,abs(q.x)));
    float alpha=(core+flame*.7)*vState.z;vec3 fire=mix(vec3(1.,.24,.035),vec3(1.,.94,.69),core);
@@ -93,16 +103,17 @@ export class PowderSmoke{
   const r=this.random,len=Math.hypot(direction.x,direction.z)||1;
   for(let i=0;i<5;i++){const angle=r()*6.28,speed=1+r()*3;this.puff({x:point.x,y:point.y??2.5,z:point.z,vx:Math.cos(angle)*speed+direction.x/len*.7,vy:.4+r(),vz:Math.sin(angle)*speed+direction.z/len*.7,life:4+r()*5,size:.45+r()*.5,growth:.18,opacity:.44,tint:stone?[.75,.73,.66]:[.57,.51,.41],drag:1.5});}
  }
- burn(point){const r=this.random;this.puff({x:point.x,y:point.y,z:point.z,vx:POWDER_WIND.x,vy:1+r()*.6,vz:POWDER_WIND.z,life:12+r()*6,size:.55+r()*.5,growth:.20,opacity:.36,tint:[.43,.44,.40],drag:.7});}
+ burn(point){const r=this.random;this.puff({x:point.x,y:point.y,z:point.z,vx:this.wind.x,vy:1+r()*.6,vz:this.wind.z,life:12+r()*6,size:.55+r()*.5,growth:.20,opacity:.36,tint:[.43,.44,.40],drag:.7});}
+ flame(point,strength=1){const r=this.random;this.ember({x:point.x,y:point.y,z:point.z,vx:this.wind.x*.18,vy:.6+r()*.8,vz:this.wind.z*.18,dx:this.wind.x*.15,dy:1,dz:this.wind.z*.15,life:.45+r()*.3,size:(1.3+r()*.8)*strength,kind:3});}
  clear(){this.puffs.length=this.haze.length=this.embers.length=0;this.time=0;this.smokeMesh.geometry.instanceCount=this.fireMesh.geometry.instanceCount=0;this.lights.forEach(l=>l.intensity=0);}
  update(dt,camera){
-  dt=clamp(dt,0,.1);this.time+=dt;
+  dt=clamp(dt,0,.1);this.time+=dt;const windSpeed=Math.hypot(this.wind.x,this.wind.z);
   for(const p of this.puffs){
    p.age+=dt;const drag=Math.exp(-dt*p.drag),shear=1+p.age*.065;
    const wx=this.wind.x*shear+Math.sin(p.seed+p.age*.35)*.4,wz=this.wind.z*shear+Math.cos(p.seed*.7+p.age*.28)*.4;
    p.vx=wx+(p.vx-wx)*drag;p.vz=wz+(p.vz-wz)*drag;p.vy+=(.16-p.vy)*(1-Math.exp(-dt*.65));
    p.x+=p.vx*dt;p.z+=p.vz*dt;p.y+=p.vy*dt;p.rotation+=dt*.035;p.kind=-1;p.dx=this.wind.x;p.dz=this.wind.z;
-   const size=p.size+(1-Math.exp(-p.age*4))*.9+p.age*p.growth;p.sx=size*(2.4+p.age*.09);p.sy=size*1.65;
+   const size=p.size+(1-Math.exp(-p.age*4))*.9+p.age*p.growth;p.sx=size*(2.1+Math.min(2,windSpeed)*.3+p.age*(.07+windSpeed*.025));p.sy=size*1.65;
    p.alpha=p.opacity*smooth(0,.09,p.age)*Math.exp(-p.age*.11)*(1-smooth(p.life*.30,p.life,p.age));
   }
   this.puffs=this.puffs.filter(p=>p.age<p.life);
@@ -111,7 +122,7 @@ export class PowderSmoke{
    p.alpha=(.065+Math.min(6,p.dose)*.025)*smooth(.35,3,p.age)*(1-smooth(p.life*.30,p.life,p.age));
   }
   this.haze=this.haze.filter(p=>p.age<p.life);
-  for(const p of this.embers){p.age+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy-=dt*5;const fade=1-p.age/p.life;p.alpha=Math.max(0,fade)*(p.kind===1?1.2:.9);p.sx=p.size*(p.kind===1?1+p.age*4:1);p.sy=p.sx*(p.kind===1?.48:.12);}
+  for(const p of this.embers){p.age+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;if(p.kind!==3)p.vy-=dt*5;const fade=1-p.age/p.life;p.alpha=Math.max(0,fade)*(p.kind===3?.48:p.kind===1?1.2:.9);p.sx=p.size*(p.kind===1?1+p.age*4:1);p.sy=p.sx*(p.kind===3?.65:p.kind===1?.48:.12);}
   this.embers=this.embers.filter(p=>p.age<p.life);
   this.lights.forEach(l=>{l.intensity*=Math.exp(-dt*28);if(l.intensity<.01)l.intensity=0;});
   // Sort inside the instanced batch so overlapping clouds blend correctly.

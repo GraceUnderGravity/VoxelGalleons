@@ -1,0 +1,2 @@
+// Plot centres leave the north/south streets and three cross streets clear.
+export const TOWN_PLOTS=[['shipwright',-18,8,7,5],['warehouse',-5.6,7,7,5.3],['customs',5.6,7,5.8,4.8],['stall',17,8,6,3.2],['cooper',-18,-4,6,5],['tavern',-5.5,-4,7,6],['chandlery',5.5,-4,6.2,5],['house',18,-4,5,4.2],['house',-18,-16,5,4.6],['chapel',-5.5,-16,6.2,7],['manor',5.8,-16,7,6],['house',18,-16,5.4,4.6],['house',-18,-28,4.8,4.4],['house',-5.5,-28,5.2,4.8],['house',5.5,-28,4.7,4.4],['house',18,-28,5,4.5]];

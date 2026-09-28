@@ -1,4 +1,4 @@
-import {SHIP_CLASSES} from './ship-classes.js';
+import {SHIP_CLASSES,gunStations} from './ship-classes.js';
 import {coastRadius} from './geography.js';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const angle=(x,z)=>Math.atan2(x,-z);
@@ -63,9 +63,35 @@ export function navalHelm(e,target,ships,islands,time,hostile=true){
 
 export function broadsideClear(e,target,ships,islands){
   const dx=target.x-e.x,dz=target.z-e.z,d=Math.hypot(dx,dz);
-  if(d<22||d>53||Math.abs(Math.sin(angle(dx,dz)-e.angle))<.94)return false;
-  const obstructed=(x,z,r)=>{const t=((x-e.x)*dx+(z-e.z)*dz)/(d*d);return t>.05&&t<.98&&Math.hypot(x-e.x-dx*t,z-e.z-dz*t)<r;};
-  for(const other of ships)if(other!==e&&other!==target&&other.hull>0&&obstructed(other.x,other.z,SHIP_CLASSES[other.shipClass].length*.52+2))return false;
-  for(const i of islands){for(let n=1;n<12;n++){const t=n/12,x=e.x+dx*t-i.x,z=e.z+dz*t-i.z;if(Math.hypot(x,z)<coastRadius(i,Math.atan2(z,x))+1)return false;}}
-  return true;
+  const spec=SHIP_CLASSES[e.shipClass],victim=SHIP_CLASSES[target.shipClass];
+  if(d<10||d>58)return false;
+  const delay=(spec.broadsideDuration||1)*.45,heading=e.angle+(e.angularVelocity||0)*delay;
+  const fx=Math.sin(heading),fz=-Math.cos(heading),rx=-fz,rz=fx,side=Math.sign(dx*rx+dz*rz)||1;
+  const flight=Math.max(0,(Math.abs(dx*rx+dz*rz)-spec.width*.5)/23),lead=Math.min(2.8,flight+delay);
+  const tx=target.x+(target.vx||0)*lead, tz=target.z+(target.vz||0)*lead;
+  const ex=e.x+(e.vx||0)*(delay+flight*.3),ez=e.z+(e.vz||0)*(delay+flight*.3);
+  const along=(tx-ex)*fx+(tz-ez)*fz,across=((tx-ex)*rx+(tz-ez)*rz)*side;
+  if(across<spec.width*.5+victim.width*.35||across>58)return false;
+  const relative=target.angle-heading;
+  const halfTarget=Math.hypot(victim.length*.43*Math.cos(relative),victim.width*.5*Math.sin(relative));
+  const stations=gunStations(e.shipClass).map((g,i)=>({...g,index:i})).filter(g=>!e.disabledGuns?.has(`${side}:${g.index}`)),needed=Math.max(1,stations.length*.20);let useful=0;
+  for(const gun of stations){
+   const error=Math.abs(along-gun.along),spread=Math.max(1,across*.07);
+   const quality=clamp((halfTarget+spread-error)/(spread*2),0,1);if(quality<=.12)continue;
+   const start={x:ex+fx*gun.along+rx*side*gun.beam,z:ez+fz*gun.along+rz*side*gun.beam};
+   const end={x:ex+fx*gun.along+rx*side*across,z:ez+fz*gun.along+rz*side*across};
+   let blocked=false;
+   for(const other of ships){
+    if(other===e||other===target||other.hull<=0)continue;
+    const c=SHIP_CLASSES[other.shipClass],local=p=>({x:((p.x-other.x)*Math.cos(other.angle)+(p.z-other.z)*Math.sin(other.angle))/(c.width*.5+1),z:((p.x-other.x)*Math.sin(other.angle)-(p.z-other.z)*Math.cos(other.angle))/(c.length*.46+1)});
+    const a=local(start),b=local(end),vx=b.x-a.x,vz=b.z-a.z,t=clamp(-(a.x*vx+a.z*vz)/(vx*vx+vz*vz||1),0,1);
+    if(Math.hypot(a.x+vx*t,a.z+vz*t)<1){blocked=true;break;}
+   }
+   if(blocked)continue;
+   const samples=Math.ceil(Math.hypot(end.x-start.x,end.z-start.z)/2);
+   for(const island of islands){for(let n=0;n<=samples;n++){const t=n/samples,x=start.x+(end.x-start.x)*t-island.x,z=start.z+(end.z-start.z)*t-island.z;if(Math.hypot(x,z)<coastRadius(island,Math.atan2(z,x))+1){blocked=true;break;}}if(blocked)break;}
+   if(!blocked)useful+=quality;
+   if(useful>=needed)return true;
+  }
+  return false;
 }

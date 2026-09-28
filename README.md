@@ -1,8 +1,12 @@
 # Voxel Galleons — The Pirate Republic
 
-A playable Three.js browser game set in the Bahamas in 1715. All game models are generated in code. The fleet combines detailed voxel hulls, smooth animated canvas, rigging, gun decks, and stern galleries. The sloop has a continuous gaff mainsail; the brig and frigate have distinct hull lines and square rigs.
+A playable Three.js browser game set in the Bahamas in 1715. The reference image inspired the voxel galleons, animated canvas, Caribbean water, and floating cargo. All game models are generated in code. The rebuilt fleet combines detailed voxel hulls, smooth animated canvas, rigging, gun decks, and stern galleries. The sloop has a continuous gaff mainsail; the brig and frigate have distinct hull lines and square rigs.
 
 ## Run locally
+
+The public game is hosted at [Voxel Galleons](https://graceundergravity.github.io/VoxelGalleons/).
+
+GitHub Actions checks the game and publishes `dist/` to GitHub Pages after pushes to `main`. In the repository's Pages settings, the publishing source is GitHub Actions. Local preview files, development screenshots, dependencies, and hosting metadata are excluded.
 
 Requires Node.js 20 or newer. From this folder, run:
 
@@ -37,6 +41,18 @@ Recover five floating salvage bundles, sink two navy patrols, and return to Nass
 
 Touch buttons support steering, sail changes, and cannon fire. Sound is off until enabled. Course setting follows a direct route; steer around islands. Game progress lasts for the current page session.
 
+## Town life and evacuation
+
+Bombardment sends voxel residents out of nearby buildings. Each person chooses a separate route around buildings and away from the shore and recent impacts. They spread into different streets and inland areas, take brief rests, and continue moving; renewed attacks change their routes. Their population is capped at 180.
+
+On each voyage, 12% of enemy crews are willing to abandon ship when hull integrity drops below 28%. They cease firing, launch one rowboat (two for a galleon), and scuttle the hull. Four seated sailors row each boat with connected hands and oars, a coordinated pull, and lifted, feathered blades on the return. Boats navigate around islands to an intact navy harbour, or a peaceful neutral settlement if both forts are lost. Survivors disembark and disperse on land. Navy fort gates swing open as they approach, remain open during passage, and close after everyone clears the entrance; arriving crews enter the courtyard. Scuttled ships award their bounty once.
+
+Cannonballs can hit exposed civilians and rowers. Buildings intercept shots before they reach people behind them. Ground strikes throw dirt and stone, leave bounded terrain marks, and can kill people within 1.25 metres; survivors flee again. Fallen voxel characters topple and fade after 12 seconds. Boats with fewer rowers travel more slowly, and only surviving crew count as rescued. New voyages clear these changes.
+
+**F2 → Evacuation previews** can evacuate a nearby town or force the nearest enemy to abandon ship. Resume the game to watch.
+
+Cannoneers now adjust elevation between 14° down and 12° up for a ship in their firing lane, accounting for hull height, range, and gravity. Horizontal spread, shot lifetime, firing timing, and damage remain unchanged. Manual shots with no ship in their lane retain their normal trajectory for shore bombardment.
+
 ## The fleet
 
 | Class | Masts | Guns | Hull strength | Top speed |
@@ -44,31 +60,31 @@ Touch buttons support steering, sail changes, and cannon fire. Sound is off unti
 | Sloop | 1 | 6 | 70 | 11.5 knots |
 | Brig | 2 | 12 | 100 | 9.4 knots |
 | Frigate | 3 | 24 | 135 | 8.6 knots |
-| Galleon | 3 | 28 | 180 | 7.5 knots |
+| Galleon | 3 | 50 | 180 | 7.5 knots |
 
-All four classes share a common rendering scale: the sloop is compact, the brig intermediate, and the frigate and galleon much larger. Pirate and navy hulls use identical dimensions for models, collision boundaries, guns, and wakes. These are stylized class proportions, not measured reconstructions of specific historical vessels.
+All four classes now share a common rendering scale: the sloop is compact, the brig intermediate, and the frigate and galleon much larger. Pirate and navy hulls use identical dimensions for models, collision boundaries, guns, and wakes. These are stylized class proportions, not measured reconstructions of specific historical vessels.
 
 Change ships anywhere with B or Change Ship. Cargo, doubloons, hull condition, and voyage objectives are preserved. Each class has different acceleration, rudder response, and damage resistance. Sailing retains momentum and the ship heels into turns.
 
-Guns fire in a randomized order within one second of the broadside command. Each gun has its own smoke, flash, recoil, aim spread, powder velocity, and ballistic arc. A full reload takes 6.2 seconds. Gun damage is balanced around repeated exchanges: a same-class perfect broadside deals at most half a fresh hull; spread reduces typical damage further. Navy hull strengths match their classes. Shots spread more while moving and fall into the sea at range.
+Guns fire in a randomized order: the galleon has 25 guns per side firing over 1.5 seconds; the other classes fire within one second. Galleon damage remains 70 per full broadside, divided among its 25 cannonballs (2.8 each). Each gun has its own smoke, flash, recoil, aim spread, powder velocity, and ballistic arc. A full reload takes 6.2 seconds. Gun damage is balanced around repeated exchanges: a same-class perfect broadside deals at most half a fresh hull; spread reduces typical damage further. Navy hull strengths match their classes. Shots spread more while moving and fall into the sea at range.
 
 The ocean has moving swells, subtle stepped sunlight in the shallows, planar reflections with ripple distortion, and a connected foam wake that follows the ship's path. MSAA and a higher render resolution smooth silhouettes. Canvas sails have subtle woven seams and wind-driven deformation shared with their shadows.
 
-Ships use oriented hull collisions. Head-on impacts slow both vessels, glancing contacts transfer turning force, and mass determines how far each hull moves. Hard contact damages both ships and sheds timber. Hull separation stays active during damage cooldowns.
+Ships use oriented hull collisions. Head-on impacts slow both vessels, glancing contacts transfer turning force, and mass determines how far each hull moves. Hard contact damages both ships and sheds timber. Individual cannons can be knocked out by direct hits or loss of their carriage supports and nearby deck connections. Detached guns tumble into the sea and stop firing immediately, including during an ordered broadside. The HUD shows working guns; harbour repairs restore them. Hull separation stays active during damage cooldowns.
 
 ## Sea, weather, and the Black Pearl
 
-The player galleon is inspired by the Black Pearl: black timber and weathered canvas, an arched stern gallery, twin glowing lanterns and a winged figurehead. Navy ships retain their own colours. Visual references: [Black Pearl images](https://corsairslegacy.com/article/black_pearl_pirates_of_the_caribbean). All geometry and materials are generated locally; no reference images are shipped as game assets.
+The player galleon is inspired by the Black Pearl: black timber and weathered canvas, an arched stern gallery, twin glowing lanterns and a winged figurehead. Navy ships retain their own colours. Visual references include the supplied film-set photograph and [additional Black Pearl images](https://corsairslegacy.com/article/black_pearl_pirates_of_the_caribbean). All geometry and materials are generated locally; no reference images are shipped as game assets.
 
-The sea uses a varied swell spectrum and irregular wind ripples, with detail filtered at distant zoom to prevent shimmer. Reflections use the overhead camera's parallel viewing direction. Sheltered coastal water and restrained foam follow the shoreline and storm crests. Ships pitch and roll on the same surface as cargo and wakes. The wake remains attached to the stern, conforms to the waves across its width, and retains enough history to fade before segments are removed. The old flat shadow patch beneath ships has been removed.
+The sea uses a varied swell spectrum and irregular wind ripples, with detail filtered at distant zoom to prevent shimmer. Reflections use the overhead camera's parallel viewing direction. Sheltered coastal water and restrained foam follow the shoreline and storm crests. The surface uses rich teal and jade colour variation with fine, filtered flecks inspired by the original voxel sea. Ships sample the water beneath their whole hull and respond through damped heave, pitch and roll. Larger, heavier classes resist rapid wave motion; steering remains responsive. An advancing bow gains buoyancy at a crest, then settles gradually, with short sprays thrown sideways when it meets the next wave. The wake remains attached to the stern, conforms to the waves across its width, and retains enough history to fade before segments are removed. The old flat shadow patch beneath ships has been removed.
 
 **F2 → Weather & sea state** provides **Calm**, **Squall**, and **Tempest**, plus independent wave, wind, and rain sliders. Settings apply immediately and remain through voyage restarts, until the page reloads. The default is Squall. Strong wind drives the canvas, flags, rain and gun smoke. Cool illumination, warm lanterns, multisampled HDR rendering, subtle bloom and colour grading create the storm atmosphere.
 
-Powder blasts expand and stretch downwind. Individual billows thin quickly; translucent battle haze drifts for up to about 48 seconds. Older smoke erodes into wisps rather than staying in compact clumps. Effect pools have fixed limits.
+Powder blasts retain their initial muzzle momentum, then bend and stretch into the current north-easterly wind. Gusts and the developer wind slider control both new smoke and lingering haze; stronger wind carries it farther. Individual billows thin quickly; translucent battle haze drifts for up to about 48 seconds. Older smoke erodes into wisps rather than staying in compact clumps. Effect pools have fixed limits.
 
 ## Naval tactics and false colours
 
-Patrols approach on a flank, match a moving target on a parallel course, or circle a stationary target at broadside distance. Predicted hull contacts cause early evasive turns. Ships hold fire when the target is outside their gun arc or another friendly ship or island blocks the shot.
+Patrols approach on a flank, match a moving target on a parallel course, or circle a stationary target at broadside distance. Predicted hull contacts cause early evasive turns. Gun crews predict the target’s movement and fire when enough individual barrels have a useful shot, including during evasive turns. They no longer wait for near-perfect alignment. Guns with obstructed lanes do not count toward that opportunity; friendly ships, islands, reloads and false-colour surprise still matter.
 
 Press **C** before approaching to fly a red naval ensign. Unaware ships and forts remain neutral. Press **C** again to hoist the Jolly Roger: nearby unaware crews take **3.5 seconds** to react. Firing reveals the pirate flag automatically. Witnesses remember the ship for the voyage, so switching flags or ship class cannot reset an encounter. Flags lower and rise when changed.
 
@@ -80,9 +96,11 @@ Cannon impacts break individual hull planks, rails, and fort masonry. Wood and i
 
 Destroyed ships list, lose their mainmast, drift, and sink over about ten seconds. The player sees the full sinking sequence before the loss screen. Forts retain visible breaches and collapsed walls when their batteries are silenced. Repairs and restarting restore the original geometry and canvas.
 
+Settlement cottages, taverns, warehouses, chandlers, cooperages, boatwright workshops, harbour offices, market stalls, council houses and churches also take cannon damage. Face the shore with a broadside and fire **Q / E**. Individual wall blocks and roof tiles break away; repeated hits bring the structure down into a lasting rubble pile with dust and debris. Both sides’ cannonballs can hit buildings. Some houses and warehouses contain flammable stores: early hits have a 35% chance to start a fire there, and sustained damage eventually ignites the exposed stores. Fires deal gradual damage, send smoke downwind, and burn out within 12 seconds of collapse. Terrain and ruins stop low shots. A new voyage restores the towns; harbour services remain available.
+
 ## Islands and ports
 
-The voyage begins at Nassau’s waterfront. The sailing region contains six islands. Coastal towns have streets, warehouses, markets and working quays; inland ridges carry palm groves, tropical canopy and limestone outcrops. Forts sit on coastal ground. Harbour services are available at the actual dock approaches. Terrain, water, navigation charts and ship collisions share the same coastline. Scroll out to see more of each island.
+The voyage begins at Nassau’s waterfront. The six islands have roughly four to seven times their original land area, across a larger sailing region. Coastal towns put warehouses and boatwrights at the quay, shops around connecting streets, civic buildings near the centre, and homes inland. Terraced foundations keep buildings seated on the hillsides; inland ridges carry palm groves, tropical canopy and limestone outcrops. Forts sit on coastal ground. Harbour services are available at the actual dock approaches. Terrain, water, navigation charts and ship collisions share the same coastline. Scroll out to see more of each island.
 
 - **Nassau:** pirate harbour, shipwright, repairs, voyage completion.
 - **Smuggler’s Cove:** black market, discounted repairs, and ship upgrades.
@@ -115,6 +133,9 @@ The **F2** developer menu grants 1,000 doubloons, individual upgrades or all upg
 - `dist/water.js`, `dist/wake.js`: reflective sea, waves, caustics, and wake ribbons.
 - `dist/models.js`: shared voxel construction, cargo, shadows.
 - `dist/islands.js`, `dist/geography.js`: terrain, buildings, shorelines, and ports.
+- `dist/settlements.js`, `dist/town-plots.js`, `dist/town-models.js`, `dist/building-damage.js`: shared town layouts, distinct building models, cannon collisions and ruins.
+- `dist/evacuation.js`, `dist/town-life.js`: civilian routing, crew escape, rowing animation and NPC casualties.
+- `dist/gunnery.js`, `dist/ground-scars.js`: limited vertical aiming and terrain strike marks.
 - `dist/battle-damage.js`: local impact damage, physical debris, repairs, and sinking sequences.
 - `dist/flags.js`, `dist/colours.js`: animated flags, disguise and encounter memory.
 - `dist/naval-ai.js`: broadside tactics, predictive avoidance and firing lanes.

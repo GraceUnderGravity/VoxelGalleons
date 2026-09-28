@@ -21,7 +21,7 @@ test('developer grants work without gold and reset or survive ship changes as ex
 test('upgrade effects change actual sailing, reload and incoming damage without free healing',()=>{
  const base=atSea(),up=atSea();devAction(up,'max');
  for(const s of [base,up]){s.angle=0;setSails(s,3);tick(s,8);}assert.ok(up.speed>base.speed*1.1);
- for(const s of [base,up]){s.cooldown=0;fireBroadside(s);assert.ok(s.salvos.every(g=>g.fireAt-s.time<=1));}
+ for(const s of [base,up]){s.cooldown=0;fireBroadside(s);assert.ok(s.salvos.every(g=>g.fireAt-s.time<=(SHIP_CLASSES[s.shipClass].broadsideDuration||1)));}
  assert.equal(base.cooldown,RELOAD_TIME);assert.ok(up.cooldown<base.cooldown*.85);assert.ok(up.salvos[0].damage<=base.salvos[0].damage*1.151);
  const plain=atSea(),armored=atSea();devAction(armored,'max');
  for(const s of [plain,armored]){s.projectiles=[{x:0,z:10,y:2,vx:1,vz:0,vy:0,life:1,owner:0,damage:10}];step(s,.016);}

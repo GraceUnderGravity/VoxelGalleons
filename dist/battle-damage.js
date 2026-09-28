@@ -1,10 +1,18 @@
 import * as THREE from './vendor/three.module.js';
 import {seeded,waveHeight} from './simulation.js';
+import {landHeightAt} from './settlements.js';
 const white=new THREE.Color('#ffffff');
 
 // Physical timber, iron and masonry fragments, batched into one draw call.
 export class BattleDebris{
- constructor(scene){this.items=[];this.rings=[];this.max=900;this.dummy=new THREE.Object3D();this.color=new THREE.Color();this.mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:1}),this.max);this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.mesh.frustumCulled=false;this.mesh.count=0;this.mesh.castShadow=true;scene.add(this.mesh);this.scene=scene;}
+ constructor(scene){this.items=[];this.rings=[];this.fallenGuns=[];this.max=900;this.dummy=new THREE.Object3D();this.color=new THREE.Color();this.mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({roughness:1}),this.max);this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.mesh.frustumCulled=false;this.mesh.count=0;this.mesh.castShadow=true;scene.add(this.mesh);this.scene=scene;}
+ dropGun(model,parts,side){
+  if(this.fallenGuns.length>=80)return;model.updateWorldMatrix(true,true);
+  const center=parts.reduce((sum,p)=>sum.add(p.center),new THREE.Vector3()).multiplyScalar(1/parts.length),group=new THREE.Group();
+  for(const p of parts){const mesh=new THREE.Mesh(p.mesh.geometry,p.mesh.material);mesh.matrixAutoUpdate=false;mesh.matrix.copy(new THREE.Matrix4().makeTranslation(-center.x,-center.y,-center.z).multiply(p.local));mesh.castShadow=true;group.add(mesh);}
+  const world=center.clone().applyMatrix4(model.matrixWorld);model.getWorldQuaternion(group.quaternion);model.getWorldScale(group.scale);group.position.copy(world);this.scene.add(group);
+  const direction=new THREE.Vector3(side,0,0).transformDirection(model.matrixWorld);this.fallenGuns.push({group,vx:direction.x*2.2,vy:1.2,vz:direction.z*2.2,age:0,landed:false});
+ }
  burst(point,{stone=false,count=22,direction=null,power=1}={}){
   for(let i=0;i<count&&this.items.length<this.max;i++){
    const a=Math.random()*Math.PI*2,v=(1.7+Math.random()*5)*power,plank=!stone&&i%4!==0;
@@ -14,13 +22,14 @@ export class BattleDebris{
  ring(x,z,size=4){const m=new THREE.Mesh(new THREE.RingGeometry(.975,1,128),new THREE.MeshBasicMaterial({color:'#d0e1c6',transparent:true,opacity:.16,side:THREE.DoubleSide,depthWrite:false}));m.rotation.x=-Math.PI/2;m.position.set(x,.06,z);this.scene.add(m);this.rings.push({mesh:m,x,z,size,age:0});}
  update(dt,time){
   let count=0;for(let i=this.items.length-1;i>=0;i--){const p=this.items[i];p.life-=dt;if(p.life<=0){this.items.splice(i,1);continue;}const water=waveHeight(p.x,p.z,time)-.10;
-   if(!p.afloat){p.vy-=9.4*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rx+=p.spinX*dt;p.rz+=p.spinZ*dt;if(p.y<water){p.afloat=true;p.vx*=.12;p.vz*=.12;p.rx=Math.PI/2;p.rz*=.1;if(p.stone)p.life=Math.min(p.life,.75);}}
-   else{p.x+=p.vx*dt;p.z+=p.vz*dt;p.vx*=Math.exp(-dt*.3);p.vz*=Math.exp(-dt*.3);p.y=p.stone?water-(.75-p.life)*2:water+.035+Math.sin(time*1.5+p.x)*.025;p.rx=Math.PI/2+Math.sin(time+p.z)*.08;}
+   if(!p.afloat&&!p.grounded){p.vy-=9.4*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.rx+=p.spinX*dt;p.rz+=p.spinZ*dt;const ground=landHeightAt(p.x,p.z);if(ground>water&&p.y<ground+.12){p.grounded=true;p.y=ground+.12;p.vx=p.vy=p.vz=0;}else if(p.y<water){p.afloat=true;p.vx*=.12;p.vz*=.12;p.rx=Math.PI/2;p.rz*=.1;if(p.stone)p.life=Math.min(p.life,.75);}}
+   else if(p.afloat){p.x+=p.vx*dt;p.z+=p.vz*dt;p.vx*=Math.exp(-dt*.3);p.vz*=Math.exp(-dt*.3);p.y=p.stone?water-(.75-p.life)*2:water+.035+Math.sin(time*1.5+p.x)*.025;p.rx=Math.PI/2+Math.sin(time+p.z)*.08;}
    this.dummy.position.set(p.x,p.y,p.z);this.dummy.rotation.set(p.rx,p.ry,p.rz);const fade=Math.min(1,p.life/1.5);this.dummy.scale.set(p.sx*fade,p.sy*fade,p.sz*fade);this.dummy.updateMatrix();this.mesh.setMatrixAt(count,this.dummy.matrix);this.mesh.setColorAt(count++,this.color.set(p.color));
   }this.mesh.count=count;this.mesh.instanceMatrix.needsUpdate=true;if(this.mesh.instanceColor)this.mesh.instanceColor.needsUpdate=true;
+  for(let i=this.fallenGuns.length-1;i>=0;i--){const g=this.fallenGuns[i],m=g.group;g.age+=dt;if(!g.landed){g.vy-=9.8*dt;m.position.x+=g.vx*dt;m.position.y+=g.vy*dt;m.position.z+=g.vz*dt;m.rotation.z+=dt*1.7;m.rotation.x+=dt*.8;const ground=landHeightAt(m.position.x,m.position.z),water=waveHeight(m.position.x,m.position.z,time);if(m.position.y<Math.max(ground,water)+.15){if(ground>water){g.landed=true;m.position.y=ground+.2;}else{this.ring(m.position.x,m.position.z,.7);g.age=21;}}}if(g.age>20){this.scene.remove(m);this.fallenGuns.splice(i,1);}}
   for(let i=this.rings.length-1;i>=0;i--){const r=this.rings[i];r.age+=dt;r.mesh.position.y=waveHeight(r.x,r.z,time)+.02;r.mesh.scale.setScalar(r.size+r.age*2.5);r.mesh.material.opacity=Math.max(0,.16*(1-r.age/5));if(r.age>5){this.scene.remove(r.mesh);r.mesh.geometry.dispose();r.mesh.material.dispose();this.rings.splice(i,1);}}
  }
- clear(){this.items.length=0;this.mesh.count=0;for(const r of this.rings){this.scene.remove(r.mesh);r.mesh.geometry.dispose();r.mesh.material.dispose();}this.rings.length=0;}
+ clear(){this.items.length=0;this.mesh.count=0;for(const g of this.fallenGuns)this.scene.remove(g.group);this.fallenGuns.length=0;for(const r of this.rings){this.scene.remove(r.mesh);r.mesh.geometry.dispose();r.mesh.material.dispose();}this.rings.length=0;}
 }
 
 export class DamageModel{
@@ -29,14 +38,19 @@ export class DamageModel{
   model.updateWorldMatrix(true,true);const inverse=model.matrixWorld.clone().invert(),matrix=new THREE.Matrix4(),size=new THREE.Vector3(),rotation=new THREE.Quaternion();
   const root=fort?model.userData.damageRoot:model;
   root.traverse(mesh=>{if(!mesh.isInstancedMesh)return;const relative=inverse.clone().multiply(mesh.matrixWorld);for(let i=0;i<mesh.count;i++){mesh.getMatrixAt(i,matrix);const local=relative.clone().multiply(matrix),center=new THREE.Vector3();local.decompose(center,rotation,size);this.parts.push({mesh,index:i,matrix:matrix.clone(),local,center,volume:Math.abs(size.x*size.y*size.z),hidden:false});}});
+  this.guns=new Map();for(const [tag,refs]of model.userData.taggedParts||[]){if(!tag.startsWith('gun:'))continue;const id=tag.slice(4),supports=model.userData.taggedParts.get('support:'+id)||[],lookup=refs=>refs.map(ref=>this.parts.find(p=>p.mesh===ref.mesh&&p.index===ref.index)).filter(Boolean);this.guns.set(id,{parts:lookup(refs),supports:lookup(supports),disabled:false});}
+  const fittings=new Set([...this.guns.values()].flatMap(g=>[...g.parts,...g.supports]));
+  for(const gun of this.guns.values())gun.anchors=this.parts.filter(p=>!fittings.has(p)&&gun.supports.some(s=>Math.abs(p.center.y-s.center.y)<.46&&Math.abs(p.center.x-s.center.x)<1.1&&Math.abs(p.center.z-s.center.z)<.8));
  }
- reset(){for(const p of this.changed){p.mesh.setMatrixAt(p.index,p.matrix);p.mesh.setColorAt(p.index,white);p.mesh.instanceMatrix.needsUpdate=true;if(p.mesh.instanceColor)p.mesh.instanceColor.needsUpdate=true;p.hidden=false;}this.changed.clear();for(const m of this.hiddenObjects)m.visible=true;this.hiddenObjects.length=0;if(this.brokenMast){this.model.remove(this.brokenMast);this.brokenMast=null;}this.model.visible=true;this.model.userData.cloth?.setDamage(0);this.model.userData.flags?.forEach(f=>f.visible=true);this.stage=0;this.ratio=1;this.death=-1;this.model.userData.sinking=0;}
+ reset(){for(const p of this.changed){p.mesh.setMatrixAt(p.index,p.matrix);p.mesh.setColorAt(p.index,white);p.mesh.instanceMatrix.needsUpdate=true;if(p.mesh.instanceColor)p.mesh.instanceColor.needsUpdate=true;p.hidden=false;}this.changed.clear();for(const gun of this.guns.values())gun.disabled=false;for(const m of this.hiddenObjects)m.visible=true;this.hiddenObjects.length=0;if(this.brokenMast){this.model.remove(this.brokenMast);this.brokenMast=null;}this.model.visible=true;this.model.userData.cloth?.setDamage(0);this.model.userData.flags?.forEach(f=>f.visible=true);this.stage=0;this.ratio=1;this.death=-1;this.model.userData.sinking=0;}
  hide(p){if(p.hidden)return;p.hidden=true;this.changed.add(p);p.mesh.setMatrixAt(p.index,new THREE.Matrix4().makeScale(0,0,0));p.mesh.instanceMatrix.needsUpdate=true;}
  localImpact(point,radius=1.1){
   const nearby=this.parts.filter(p=>!p.hidden&&p.volume<(this.fort?8:3.8)&&p.center.distanceTo(point)<radius).sort((a,b)=>a.center.distanceTo(point)-b.center.distanceTo(point));
   for(const [i,p]of nearby.entries()){if(i<(this.fort?16:28)&&p.center.distanceTo(point)<radius*.80)this.hide(p);else{this.changed.add(p);p.mesh.setColorAt(p.index,new THREE.Color('#61594a'));p.mesh.instanceColor.needsUpdate=true;}}
  }
  impact(worldPoint,effects,direction){this.effects=effects;this.model.updateWorldMatrix(true,true);const local=this.model.worldToLocal(worldPoint.clone());this.localImpact(local,this.fort?1.8:1.25);effects.burst(worldPoint,{stone:this.fort,count:this.fort?30:24,direction});}
+ disableGun(id,effects){const gun=this.guns.get(id);if(!gun||gun.disabled)return;gun.disabled=true;effects?.dropGun(this.model,gun.parts,Number(id.split(':')[0]));for(const p of gun.parts)this.hide(p);}
+ unsupportedGuns(){return [...this.guns].filter(([,gun])=>!gun.disabled&&(gun.parts.some(p=>p.hidden)||gun.supports.length>0&&gun.supports.every(p=>p.hidden)||gun.anchors.length>0&&gun.anchors.every(p=>p.hidden))).map(([id])=>id);}
  sync(ratio){
   ratio=Math.max(0,Math.min(1,ratio));if(ratio>=.999&&this.ratio<.999)this.reset();this.ratio=ratio;this.model.userData.cloth?.setDamage((1-ratio)*.92);
   const stage=ratio<.22?3:ratio<.47?2:ratio<.76?1:0;

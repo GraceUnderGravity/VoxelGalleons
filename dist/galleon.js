@@ -3,6 +3,7 @@ import { Voxels } from './models.js';
 import { clothController, squareCanvas, triangularCanvas } from './canvas-cloth.js';
 import { createMastFlag } from './flags.js';
 import { seeded } from './simulation.js';
+import {GALLEON_GUNS,galleonHullWidth} from './ship-classes.js';
 
 // Fine-grained, hand-shaped voxel construction. Bow is -Z; the main deck is Y=3.7.
 export function makeGalleon(navy=false){
@@ -12,11 +13,7 @@ export function makeGalleon(navy=false){
   const gold=navy?['#caa260','#d4ad69','#dfbb79','#b78d4e']:['#666860','#737268','#7a786b','#5b605a'];
   const navyPaint=navy?['#893d2e','#79372b','#994a32']:['#232c2e','#283133','#2c3536'];
   const pick=a=>a[Math.floor(random()*a.length)];
-  const hullWidth=z=>{
-    if(z<-6)return 4.15*Math.sqrt(Math.max(0,(z+11.6)/5.6));
-    if(z>5.5)return 4.15-(z-5.5)*.26;
-    return 4.15-Math.pow(z/12,2)*.25;
-  };
+  const hullWidth=galleonHullWidth;
   // Individual strakes follow both the hull's sheer and its curved cross-section.
   for(let iz=0;iz<48;iz++){
     const z=-11.15+iz*.45,half=hullWidth(z),sheer=Math.max(0,(-z-6)*.10)+Math.max(0,(z-4)*.075);
@@ -24,7 +21,8 @@ export function makeGalleon(navy=false){
       const y=.10+row*.41+sheer,fullness=.43+.57*Math.sin((row+1)/10*Math.PI*.52),w=half*fullness;
       for(const side of [-1,1]){
         const color=row===3||row===4?pick(navyPaint):row===5||row===8?pick(gold):pick(wood);
-        v.box(side*w,y,z,.46,.43,.47,color);
+        const gunport=Math.abs(y-2.46)<.4&&GALLEON_GUNS.some(g=>!g.upper&&Math.abs(z-g.z)<.35);
+        if(!gunport)v.box(side*w,y,z,.46,.43,.47,color);
         if(row===5)v.box(side*(w+.16),y+.05,z,.18,.13,.47,pick(gold));
       }
       if(iz===0||iz===47)v.box(0,y,z,Math.max(.35,w*2),.43,.45,row===3||row===4?pick(navyPaint):pick(wood));
@@ -104,15 +102,21 @@ export function makeGalleon(navy=false){
     for(const side of [-1,1])for(let k=0;k<7;k++){v.box(side*(.28+k*.14),3.99+k*.09,-12.96+k*.12,.19,.49-k*.025,.20,k%2?'#737d70':'#8a9080',-.6,side*.3,side*.65);}
     for(const side of [-1,1])v.box(side*.30,4.05,-13.46,.16,.62,.17,'#919584',-.8,0,side*.4);
   }
-  // Seven gun ports and complete cannons on each side.
-  for(const side of [-1,1])for(let i=0;i<7;i++){
-    const z=-6+i*1.8,w=hullWidth(z);
-    v.box(side*(w*.91+.15),2.41,z,.12,.70,.83,'#171f1e');
-    v.box(side*(w*.91+.22),2.86,z,.65,.11,.87,pick(wood),0,0,side*.15);
-    v.box(side*(w*.91+.43),2.46,z,1.12,.36,.38,'#343c39');
-    v.box(side*(w*.91+.94),2.46,z,.12,.44,.46,'#424941');
-    v.box(side*(w*.91+1.01),2.46,z,.04,.23,.24,'#131c1c');
-    {v.box(side*(w-.8),3.88,z,.82,.35,.7,(navy?'#705031':'#49463b'));v.box(side*(w-.45),4.1,z,1.05,.25,.29,'#39413a');}
+  // Thirteen lower-deck guns and twelve upper guns per side. Shared muzzle
+  // stations ensure flashes and shot originate at these actual barrel mouths.
+  for(const side of [-1,1])for(const [gunIndex,gun] of GALLEON_GUNS.entries()){
+    const {z,y,upper,muzzleX}=gun,w=hullWidth(z);
+    if(!upper){
+      v.box(side*(w*.91+.10),y,z,.12,.70,.69,'#171f1e');
+      v.box(side*(w*.91+.22),y+.43,z,.65,.10,.73,pick(wood),0,0,side*.20);
+      for(const offset of [-.37,.37])v.box(side*(w*.91+.22),y,z+offset,.12,.76,.075,pick(gold));
+    }
+    v.tag=`support:${side}:${gunIndex}`;v.box(side*(muzzleX-1.03),y-.48,z,1.32,.17,.78,pick(darkWood));v.tag=`gun:${side}:${gunIndex}`;
+    v.box(side*(muzzleX-.63),y,z,1.18,upper?.24:.31,upper?.28:.34,'#343c39');
+    v.box(side*(muzzleX-.08),y,z,.12,upper?.31:.39,upper?.35:.42,'#424941');
+    v.box(side*muzzleX,y,z,.04,.19,.22,'#131c1c');
+    v.box(side*(muzzleX-.95),y-.21,z,.73,.27,.60,navy?'#705031':'#49463b');
+    for(const offset of [-.31,.31])v.box(side*(muzzleX-.96),y-.29,z+offset,.23,.27,.10,'#303731');v.tag=null;
   }
   // Cargo hatches, gratings, stairs, bollards, coils, and a capstan.
   for(const z of [-3,3.6]){v.box(0,3.77,z,2.3,.18,1.6,(navy?'#644c2f':'#2b3430'));for(let i=-4;i<=4;i++)v.box(i*.23,3.89,z,.10,.11,1.47,(navy?'#b39459':'#70705e'));for(let j=-2;j<=2;j++)v.box(0,3.90,z+j*.25,2.1,.1,.09,(navy?'#9a7d45':'#505b4d'));}
@@ -167,6 +171,6 @@ export function makeGalleon(navy=false){
   const crew=new Voxels();
   for(const [x,z]of [[-2,-4],[2.3,-1],[-1.8,1.5],[1.7,7.6]]){const y=z>5?5.2:3.76;crew.box(x,y+.3,z,.29,.65,.27,navy?'#9a4f3a':'#426566');crew.box(x,y+.75,z,.29,.3,.29,'#c3a074');crew.box(x,y+.94,z,.54,.14,.4,'#313b2d');crew.box(x-.09,y-.02,z,.12,.18,.22,'#403c2c');crew.box(x+.09,y-.02,z,.12,.18,.22,'#403c2c');}
   g.add(crew.build());g.userData.sinking=0;g.scale.x=.80;
-  g.userData.blackPearl=!navy;return g;
+  g.userData.blackPearl=!navy;g.userData.gunMuzzles=[-1,1].flatMap(side=>GALLEON_GUNS.map(g=>new THREE.Vector3(side*g.muzzleX,g.y,g.z)));return g;
 }
 

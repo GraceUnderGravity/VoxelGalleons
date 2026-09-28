@@ -24,8 +24,51 @@ export const waveGLSL=`
 export const shelterGLSL=`
  float oceanShelter(vec2 p){float shore=1000.;for(int i=0;i<6;i++){vec2 q=p-islands[i].xy;float a=atan(q.y,q.x),fi=float(i),coast=islands[i].z*(1.+.12*sin(a*3.+fi*1.37)+.065*sin(a*7.+fi*.61)+.027*sin(a*13.+fi*2.));shore=min(shore,length(q)-coast);}return .15+.85*smoothstep(1.,24.,shore);}
 `;
+const clamp=(value,limit)=>Math.max(-limit,Math.min(limit,value));
+
+// Fit the water beneath the whole waterplane. A small crest cannot lift one
+// corner of a heavy hull as if the ship were a floating crate.
+export function hullWaveTarget(ship,spec,time){
+ const fx=Math.sin(ship.angle),fz=-Math.cos(ship.angle),rx=Math.cos(ship.angle),rz=Math.sin(ship.angle);
+ let weightSum=0,heightSum=0,pitchMoment=0,rollMoment=0,longMoment=0,beamMoment=0;
+ for(const station of [-.43,-.23,0,.23,.43]){
+  const along=station*spec.length,taper=1-Math.abs(station)*.85;
+  for(const side of [-.42,0,.42]){
+   const across=side*spec.width*taper,weight=taper*(side===0?1:.8);
+   const height=surfaceHeight(ship.x+fx*along+rx*across,ship.z+fz*along+rz*across,time);
+   weightSum+=weight;heightSum+=height*weight;
+   pitchMoment+=height*along*weight;longMoment+=along*along*weight;
+   rollMoment+=height*across*weight;beamMoment+=across*across*weight;
+  }
+ }
+ const stability=Math.sqrt(spec.mass),meanHeight=heightSum/weightSum,underway=Math.min(1,Math.max(0,ship.speed||0)/spec.speed);
+ const bowHeight=surfaceHeight(ship.x+fx*spec.length*.46,ship.z+fz*spec.length*.46,time);
+ // Buoyancy builds under an advancing bow. The spring below delays the lift and
+ // landing, so the hull shoulders through a crest instead of matching each bump.
+ const bowLoad=Math.max(0,bowHeight-meanHeight)*underway;
+ return {y:meanHeight+bowLoad*.10/stability,pitch:clamp((Math.atan(pitchMoment/longMoment)*.68+Math.atan(bowLoad/(spec.length*.46))*.24)/stability,.085/stability),roll:clamp(Math.atan(rollMoment/beamMoment)*.52/stability,.105/stability)};
+}
+
+const hullMotions=new WeakMap();
+// Exact critically damped spring: gradual response without frame-rate-dependent
+// bounce or resonance. Large hulls have slower angular responses and less heel.
+function settle(position,velocity,target,frequency,dt){
+ const offset=position-target,impulse=(velocity+frequency*offset)*dt,decay=Math.exp(-frequency*dt);
+ return [target+(offset+impulse)*decay,(velocity-frequency*impulse)*decay];
+}
 export function wavePose(ship,spec,time){
- const f={x:Math.sin(ship.angle),z:-Math.cos(ship.angle)},r={x:Math.cos(ship.angle),z:Math.sin(ship.angle)},l=spec.length*.32,w=spec.width*.65;
- const h=(x,z)=>surfaceHeight(x,z,time),bow=h(ship.x+f.x*l,ship.z+f.z*l),stern=h(ship.x-f.x*l,ship.z-f.z*l),port=h(ship.x-r.x*w,ship.z-r.z*w),starboard=h(ship.x+r.x*w,ship.z+r.z*w);
- return {y:(h(ship.x,ship.z)*.5+(bow+stern)*.25)*.88,pitch:Math.max(-.20,Math.min(.20,(bow-stern)/(l*2))),roll:Math.max(-.24,Math.min(.24,(starboard-port)/(w*2)))};
+ let motion=hullMotions.get(ship);
+ const reset=!motion||motion.spec!==spec||time<motion.time||Math.hypot(ship.x-motion.x,ship.z-motion.z)>spec.length*2;
+ if(!reset&&time===motion.time)return motion.pose;
+ const target=hullWaveTarget(ship,spec,time);
+ if(reset){
+  motion={spec,time,x:ship.x,z:ship.z,pose:{y:target.y,pitch:0,roll:0},velocity:{y:0,pitch:0,roll:0}};
+  hullMotions.set(ship,motion);return motion.pose;
+ }
+ const dt=Math.min(.1,Math.max(0,time-motion.time)),inertia=Math.pow(spec.mass,.28);
+ for(const [axis,frequency] of [['y',2.8/inertia],['pitch',1.5/inertia],['roll',1.08/inertia]]){
+  [motion.pose[axis],motion.velocity[axis]]=settle(motion.pose[axis],motion.velocity[axis],target[axis],frequency,dt);
+ }
+ motion.time=time;motion.x=ship.x;motion.z=ship.z;
+ return motion.pose;
 }

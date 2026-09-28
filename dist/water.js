@@ -44,22 +44,35 @@ export function createSea(islands){
           float coast=islands[i].z*(1.+.12*sin(a*3.+fi*1.37)+.065*sin(a*7.+fi*.61)+.027*sin(a*13.+fi*2.));
           float d=length(q)-coast;if(d<shore){shore=d;coastAngle=a;}
         }
-        // Depth, rather than high-contrast marbling, gives the sea its colour.
+        // A restrained jade/teal palette, with broad pigment variation and
+        // small world-space flecks, complements the carved voxel silhouettes.
         float sandbar=(noise(p*.095)-.5)*2.1;
         float shallows=1.-smoothstep(1.,27.,shore+sandbar);
-        vec3 deep=vec3(.035,.278,.303),lagoon=vec3(.20,.61,.55);
-        vec3 col=mix(deep,lagoon,shallows*.87);
+        vec2 current=vec2(time*.011,-time*.007);
+        vec2 warp=vec2(noise(p*.019+current),noise(p*.023-current+13.7));
+        float pigment=fbm(p*.042+warp*.8+current);
+        vec3 deep=mix(vec3(.014,.145,.116),vec3(.030,.285,.203),smoothstep(.25,.69,pigment));
+        vec3 lagoon=vec3(.16,.49,.33);
+        vec3 col=mix(deep,lagoon,shallows*.82);
         float sand=1.-smoothstep(-.7,5.,shore);
-        col=mix(col,vec3(.48,.72,.57),sand*.59);
-        col+=vec3(.026,.041,.030)*(fbm(p*.025)-.5);
+        col=mix(col,vec3(.40,.61,.40),sand*.55);
 
         float swell=p.x*.116+p.y*.051-time*.68+.4;
         float cross=p.y*.173-p.x*.069-time*.81+2.1;
         float sheltered=.15+.85*smoothstep(1.,24.,shore);
         float footprint=max(length(dFdx(p)),length(dFdy(p)));
         vec2 slopes=oceanSlope(p,time)*amplitude*sheltered*.32;
-        slopes+=windRipples(p,time,footprint)*mix(.45,1.25,smoothstep(.3,5.,amplitude))*mix(.65,1.,sheltered);
+        slopes+=windRipples(p,time,footprint)*mix(.28,.70,smoothstep(.3,5.,amplitude))*mix(.65,1.,sheltered);
         vec3 normal=normalize(vec3(-slopes.x,1.,-slopes.y));
+        // Broken, low-contrast flecks replace the photographic wrinkled sheen.
+        // They live on the sea, and fade away before becoming subpixel noise.
+        vec2 ink=floor(p*5.)/5.;
+        float fleck=hash(floor(p*5.));
+        float resolvedInk=1.-smoothstep(.16,.40,footprint);
+        float brush=fbm(ink*vec2(.75,1.6)+vec2(-time*.12,time*.035));
+        float glimmer=smoothstep(.60,.74,brush)*smoothstep(.40,.92,fleck)*resolvedInk;
+        col=mix(col,vec3(.39,.65,.47),glimmer*.23);
+        col*=1.+(fleck-.5)*.038*resolvedInk;
         // White water only forms at steep, constructive wave crests.
         // Ordinary swells are visible through their changing reflection, not painted marks.
         vec2 drift=vec2(time*.018,-time*.012);
@@ -86,7 +99,7 @@ export function createSea(islands){
         uv+=vec2(sin(p.y*2.2-time*1.5)*.00065+sin(p.y*.65+time)*.0010,sin(p.x*1.4+time*.7)*.00065);
         vec4 reflection=texture2D(reflectionMap,uv);
         float reflectedStrength=.38+sin(cross)*.035;
-        vec3 tint=reflection.rgb*vec3(.66,.88,.81);
+        vec3 tint=reflection.rgb*vec3(.62,.85,.69);
         col=mix(col,tint,reflection.a*reflectedStrength);
         // Orthographic rays are parallel, including at chart zoom.
         vec3 viewDir=viewDirection;
@@ -96,12 +109,12 @@ export function createSea(islands){
         float clouds=fbm(reflectedSky.xz*3.6+drift*.35);
         vec3 sky=mix(vec3(.030,.060,.075),vec3(.083,.153,.173),skyBand*(.82+clouds*.18));
         float fresnel=.10+.65*pow(1.-max(0.,dot(normal,viewDir)),3.);
-        vec3 body=col*mix(vec3(1.),vec3(.15,.15,.16),mood);
+        vec3 body=col*mix(vec3(1.),vec3(.38,.38,.36),mood);
         body*=.87+.20*max(0.,dot(normal,moon));
-        col=body+sky*(.24+fresnel*.65);
+        col=body+sky*(.10+fresnel*.24);
         vec3 halfVector=normalize(moon+viewDir);
         float specular=pow(max(0.,dot(normal,halfVector)),120.);
-        col+=vec3(.085,.115,.12)*specular;
+        col+=vec3(.055,.10,.075)*specular;
         gl_FragColor=vec4(col,1.);
       }`
   }));water.rotation.x=-Math.PI/2;water.position.y=-.23;
